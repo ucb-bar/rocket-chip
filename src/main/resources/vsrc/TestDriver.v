@@ -9,6 +9,14 @@
 
 module TestDriver;
 
+`ifdef DEBUG
+  // v 5.022 silently drops $dumpoff/$dumpon when emitting C++.
+  // wf_set_dumping is provided by sims/verilator/wf_main.cc and flips the
+  // model's internal __Vm_dumping flag, which is the only effective way to
+  // pause/resume the trace stream at runtime.
+  import "DPI-C" function void wf_set_dumping(input bit en);
+`endif
+
   reg clock = 1'b0;
   reg reset = 1'b1;
 
@@ -75,16 +83,26 @@ module TestDriver;
     begin
       $dumpfile(vcdfile);
       $dumpvars(0, testHarness);
+`ifdef DEBUG
+      // Start tracing disabled. The wf_active edge-detect block below
+      // toggles it on/off based on the harness selective-waveform binder.
+      // Builds without the binder default wf_active=1, so the very first
+      // clock edge sees a 0->1 transition and turns dumping on.
+      wf_set_dumping(1'b0);
+`endif
     end
 
 `ifdef FSDB
 `define VCDPLUSON $fsdbDumpon;
+`define VCDPLUSOFF $fsdbDumpoff;
 `define VCDPLUSCLOSE $fsdbDumpoff;
 `elsif VCS
 `define VCDPLUSON $vcdpluson(0); $vcdplusmemon(0);
+`define VCDPLUSOFF $vcdplusoff;
 `define VCDPLUSCLOSE $vcdplusclose; $dumpoff;
 `else
 `define VCDPLUSON $dumpon;
+`define VCDPLUSOFF $dumpoff;
 `define VCDPLUSCLOSE $dumpoff;
 `endif
 `else
@@ -100,11 +118,13 @@ module TestDriver;
 
 `endif
 
-    if (dump_start == 0)
-    begin
-      // Start dumping before first clock edge to capture reset sequence in waveform
-      `VCDPLUSON
-    end
+    // Note: the previous initial-block VCDPLUSON (gated on dump_start == 0)
+    // was removed because the wf_active edge-detect block below is the sole
+    // arbiter of dump on/off. For backward-compat builds, wf_active defaults
+    // to 1, so the very first posedge clock fires a 0->1 rising edge and
+    // turns dumping back on. The trade-off: pre-clock initial-state values
+    // are not captured (acceptable; reset sequence still appears once the
+    // first clock fires).
   end
 
 `ifdef TESTBENCH_IN_UVM
@@ -116,6 +136,7 @@ module TestDriver;
   reg failure = 1'b0;
   wire success;
   integer stderr = 32'h80000002;
+  integer stdout = 32'h80000001;
   always @(posedge clock)
   begin
 `ifdef GATE_LEVEL
@@ -161,10 +182,33 @@ module TestDriver;
     end
   end
 
+  // Selective waveform dumping driven by harness wf_active.
+  // Tracing was set to disabled at the end of the initial block via $dumpoff;
+  // wf_active_d defaults to 0, so the first posedge clock sees a 0->1 edge
+  // when wf_active is high (backward-compat builds where wf_active=1 by
+  // default), turning dumping back on. For binder builds, wf_active stays 0
+  // until a window triggers, then the rising edge fires.
+  wire wf_active;
+`ifdef DEBUG
+  reg wf_active_d;
+  always @(posedge clock) begin
+    wf_active_d <= wf_active;
+    if (wf_active && !wf_active_d) begin
+      $fdisplay(stdout, "WF: rising edge at t=%0t cycle=%0d", $time, trace_count);
+      wf_set_dumping(1'b1);
+    end
+    if (!wf_active && wf_active_d) begin
+      $fdisplay(stdout, "WF: falling edge at t=%0t cycle=%0d", $time, trace_count);
+      wf_set_dumping(1'b0);
+    end
+  end
+`endif
+
   `MODEL testHarness(
     .clock(clock),
     .reset(reset),
-    .io_success(success)
+    .io_success(success),
+    .io_wf_active(wf_active)
   );
 
 endmodule
