@@ -180,6 +180,7 @@ class RocketTileModuleImp(outer: RocketTile) extends BaseTileModuleImp(outer)
     core.io.trace_core_ingress.get <> outer.trace_encoder.get.module.io.in
     outer.trace_encoder_controller.foreach { lm =>
       outer.trace_encoder.get.module.io.control <> lm.module.io.control
+      lm.module.io.perf.stall := outer.trace_encoder.get.module.io.stall
     }
 
     val trace_sink_arbiter = Module(new TraceSinkArbiter(outer.traceSinkIds, 

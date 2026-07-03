@@ -8,7 +8,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import org.chipsalliance.diplomacy.lazymodule._
 import freechips.rocketchip.diplomacy.{AddressSet}
-import freechips.rocketchip.resources.{SimpleDevice}
+import freechips.rocketchip.resources.{Description, ResourceBindings, SimpleDevice}
 import freechips.rocketchip.tilelink.TLRegisterNode
 import freechips.rocketchip.regmapper.{RegField, RegFieldDesc}
 
@@ -21,9 +21,22 @@ class TraceEncoderControlInterface() extends Bundle {
   val target = UInt(TraceSinkTarget.width.W)
   val bp_mode = UInt(32.W)
 }
+
+class TraceEncoderPerformanceInterface() extends Bundle {
+  val stall = Bool()
+}
+
 class TraceEncoderController(addr: BigInt, beatBytes: Int, hartId: Int)(implicit p: Parameters) extends LazyModule {
 
-  val device = new SimpleDevice(s"trace-encoder-controller$hartId", Seq("ucbbar,trace"))
+  val device = new SimpleDevice(s"trace-encoder-controller$hartId", Seq("ucbbar,trace")) {
+    override def describe(resources: ResourceBindings): Description = {
+      val Description(name, mapping) = super.describe(resources)
+      val traceDmaProp = Map(
+        "ucbbar,trace-dma" -> resources("ucbbar,trace-dma").map(_.value)
+      ).collect { case (k, v) if v.nonEmpty => (k, v) }
+      Description(name, mapping ++ traceDmaProp)
+    }
+  }
   val node = TLRegisterNode(
     address = Seq(AddressSet(addr, 0xFF)),
     device = device,
@@ -33,6 +46,7 @@ class TraceEncoderController(addr: BigInt, beatBytes: Int, hartId: Int)(implicit
   class Impl extends LazyModuleImp(this) {
     val io = IO(new Bundle {
       val control = Output(new TraceEncoderControlInterface())
+      val perf = Input(new TraceEncoderPerformanceInterface())
     })
 
     val control_reg_write_valid = Wire(Bool())
@@ -61,6 +75,11 @@ class TraceEncoderController(addr: BigInt, beatBytes: Int, hartId: Int)(implicit
       (true.B, control_reg_bits)
     }
 
+    val stall = RegInit(0.U(64.W))
+    when (io.perf.stall) {
+      stall := stall + 1.U
+    }
+
     val regmap = node.regmap(
       Seq(
         0x00 -> Seq(
@@ -78,6 +97,10 @@ class TraceEncoderController(addr: BigInt, beatBytes: Int, hartId: Int)(implicit
         0x24 -> Seq(
           RegField(32, trace_bp_mode,
             RegFieldDesc("bp_mode", "Trace branch predictor mode"))
+        ),
+        0x28 -> Seq(
+          RegField.r(64, stall,
+            RegFieldDesc("stall", "Trace encoder stall"))
         )
       ):_*
     )

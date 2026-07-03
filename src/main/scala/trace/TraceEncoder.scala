@@ -8,7 +8,7 @@ import chisel3.util._
 import scala.math.min
 
 import org.chipsalliance.cde.config.Parameters
-import org.chipsalliance.diplomacy.lazymodule._
+import freechips.rocketchip.diplomacy._
 
 case class TraceEncoderParams(
   encoderBaseAddr: BigInt,
@@ -28,6 +28,6 @@ class LazyTraceEncoderModule(outer: LazyTraceEncoder) extends LazyModuleImp(oute
     val control = Input(new TraceEncoderControlInterface())
     val in = Input(new TraceCoreInterface(outer.coreParams))
     val stall = Output(Bool())
-    val out = Decoupled(UInt(8.W))
+    val out = new TraceEgressInterface()
   })
 }

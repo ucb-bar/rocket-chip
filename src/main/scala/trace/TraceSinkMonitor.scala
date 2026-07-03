@@ -13,7 +13,8 @@ class TraceSinkMonitor(name: String) extends BlackBox(
     val clk = Input(Clock())
     val reset = Input(Reset())
     val in_fire = Input(Bool())
-    val in_byte = Input(UInt(8.W))
+    val in_byte = Vec(TraceEgressConstants.numLanes, Input(UInt(8.W)))
+    val in_mask = Vec(TraceEgressConstants.numLanes, Input(Bool()))
   })
   addResource("/vsrc/TraceSinkMonitor.v")
 }

@@ -25,11 +25,15 @@ object TraceItype extends ChiselEnum {
   val ITInJump    = Value(15.U)
 }
 
+object TraceEgressConstants {
+  val numLanes = 4
+}
+
 case class TraceCoreParams (
   nGroups: Int = 1,
   iretireWidth: Int = 1,
-  xlen: Int = 32,
-  iaddrWidth: Int = 32
+  xlen: Int = 64,
+  iaddrWidth: Int = 64
 )
 
 
@@ -49,3 +53,10 @@ class TraceCoreInterface (val params: TraceCoreParams) extends Bundle {
   val time = UInt(params.xlen.W)
 }
 
+class TraceEgressInterface extends Bundle {
+  val bits = Output(Vec(TraceEgressConstants.numLanes, UInt(8.W)))
+  val mask = Output(Vec(TraceEgressConstants.numLanes, Bool()))
+  val valid = Output(Bool())
+  val ready = Input(Bool())
+  def fire = valid && ready
+}
