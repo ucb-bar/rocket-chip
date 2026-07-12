@@ -38,7 +38,7 @@ class TraceEncoderController(addr: BigInt, beatBytes: Int, hartId: Int)(implicit
     }
   }
   val node = TLRegisterNode(
-    address = Seq(AddressSet(addr, 0xFF)),
+    address = Seq(AddressSet(addr, 0xFFF)),
     device = device,
     beatBytes = beatBytes
   )
