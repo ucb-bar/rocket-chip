@@ -749,28 +749,31 @@ class CSRFile(
     (usingFPU || usingVector).option(CSRs.fcsr -> read_fcsr)
 
   val read_vcsr = Cat(reg_vxrm.getOrElse(0.U), reg_vxsat.getOrElse(0.U))
-  // Real Zvt's vtype has no matrix fields -- tm/tk/vtwiden live in the separate
-  // mtype CSR below. Internally this RTL still embeds them in VType's otherwise-
-  // reserved bits (see its comment), so mask them out of the ISA-visible vtype
-  // CSR read rather than changing that internal representation.
-  val read_vtype = {
-    val vt = reg_vconfig.get.vtype
-    Cat(vt.vill, 0.U((xLen - 10).W), vt.altfmt, vt.vma, vt.vta, vt.vsew, vt.vlmul_sign, vt.vlmul_mag)
-  }
-  val read_mtype = {
-    val vt = reg_vconfig.get.vtype
-    MatrixConfig.widenDecode(vt.vtwiden) | (vt.tk << 5) | (vt.tm << 10)
-  }
-  val vector_csrs = if (!usingVector) LinkedHashMap() else LinkedHashMap[Int,Bits](
-    CSRs.vxsat -> reg_vxsat.get,
-    CSRs.vxrm -> reg_vxrm.get,
-    CSRs.vcsr -> read_vcsr,
-    CSRs.vstart -> reg_vstart.get,
-    CSRs.vtype -> read_vtype,
-    CSRs.vl -> reg_vconfig.get.vl,
-    CSRs.vlenb -> (vLen / 8).U) ++
-    usingMatrix.option(CSRs.mtype -> read_mtype)
 
+  val vector_csrs = if (!usingVector) LinkedHashMap() else {
+    // Real Zvt's vtype has no matrix fields -- tm/tk/vtwiden live in the separate
+    // mtype CSR below. Internally this RTL still embeds them in VType's otherwise-
+    // reserved bits (see its comment), so mask them out of the ISA-visible vtype
+    // CSR read rather than changing that internal representation.
+    val read_vtype = {
+      val vt = reg_vconfig.get.vtype
+      Cat(vt.vill, 0.U((xLen - 10).W), vt.altfmt, vt.vma, vt.vta, vt.vsew, vt.vlmul_sign, vt.vlmul_mag)
+    }
+    val read_mtype = {
+      val vt = reg_vconfig.get.vtype
+      MatrixConfig.widenDecode(vt.vtwiden) | (vt.tk << 5) | (vt.tm << 10)
+    }
+
+    LinkedHashMap[Int,Bits](
+      CSRs.vxsat -> reg_vxsat.get,
+      CSRs.vxrm -> reg_vxrm.get,
+      CSRs.vcsr -> read_vcsr,
+      CSRs.vstart -> reg_vstart.get,
+      CSRs.vtype -> read_vtype,
+      CSRs.vl -> reg_vconfig.get.vl,
+      CSRs.vlenb -> (vLen / 8).U) ++
+      usingMatrix.option(CSRs.mtype -> read_mtype)
+  }
   read_mapping ++= debug_csrs
   read_mapping ++= nmi_csrs
   read_mapping ++= context_csrs
